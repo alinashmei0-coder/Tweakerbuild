@@ -1,0 +1,81 @@
+name: Build Tweak
+
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: "Telegram user request"
+        required: true
+        type: string
+      chat_id:
+        description: "Telegram chat ID"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install httpx
+
+      - name: Tell Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ inputs.chat_id }}
+        run: python scripts/send_telegram.py "🛠️ استلمت طلبك. جاري إنشاء المشروع والبناء..."
+
+      - name: Generate project with DeepSeek
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          REQUEST: ${{ inputs.request }}
+        run: python scripts/deepseek_generate.py
+
+      - name: Install Theos dependencies
+        run: |
+          brew update
+          brew install ldid dpkg
+          git clone --depth 1 https://github.com/theos/theos.git "$RUNNER_TEMP/theos"
+          git clone --depth 1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos/sdks"
+          echo "THEOS=$RUNNER_TEMP/theos" >> "$GITHUB_ENV"
+
+      - name: Build package
+        run: make package FINALPACKAGE=1 THEOS="$THEOS"
+
+      - name: Collect package
+        run: |
+          mkdir -p artifacts
+          find . -type f -name "*.deb" -not -path "./artifacts/*" -exec cp {} artifacts/ \;
+          test -n "$(find artifacts -type f -name '*.deb' -print -quit)"
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweak-${{ github.run_id }}
+          path: artifacts/*.deb
+
+      - name: Success message
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ inputs.chat_id }}
+        run: python scripts/send_telegram.py "✅ اكتمل البناء. افتح GitHub Actions لتحميل ملف .deb."
+
+      - name: Failure message
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ inputs.chat_id }}
+        run: python scripts/send_telegram.py "❌ فشل البناء. افتح GitHub Actions لمعرفة الخطأ."

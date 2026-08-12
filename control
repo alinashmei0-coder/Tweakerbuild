@@ -1,0 +1,9 @@
+Package: com.example.twaekerbuildtest
+Name: TwaekerBuild Test
+Depends: mobilesubstrate
+Architecture: iphoneos-arm64
+Description: Harmless TwaekerBuild test package
+Maintainer: TwaekerBuild
+Author: TwaekerBuild
+Section: Tweaks
+Version: 0.1.0
